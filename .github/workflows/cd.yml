@@ -1,4 +1,4 @@
-name: CD - Build and Push to Docker Hub
+name: CD - Build and Push to Docker
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     
     steps:
       - name: Checkout code
@@ -42,12 +41,9 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:latest
             ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:${{ github.sha }}
 
-      - name: Deployment Summary
+      - name: Verify push
         run: |
-          echo "========================================="
           echo "✅ CD Pipeline Completed Successfully!"
-          echo "========================================="
           echo "Images pushed to Docker Hub:"
           echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-backend:latest"
           echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:latest"
-          echo "========================================="
