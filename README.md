@@ -11,3 +11,4 @@ Access:
 - Django API: http://localhost:8000
 # CD Pipeline with Docker Hub
 # CD Pipeline Fix
+# CD: Updated Docker token
