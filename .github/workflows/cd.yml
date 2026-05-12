@@ -1,17 +1,13 @@
 name: CD - Build and Push to Docker Hub
 
 on:
-  workflow_run:
-    workflows: ["CI - Build and Test"]
-    types:
-      - completed
-    branches: [main]
+  push:
+    branches: [ main, master ]
 
 jobs:
-  docker-build-push:
+  build-and-push:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,7 +15,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -28,31 +24,26 @@ jobs:
       - name: Build and push Backend
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: Dockerfile.backend
+          context: ./django-backend
+          file: ./django-backend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/twendego-backend:latest
-            ${{ secrets.DOCKER_USERNAME }}/twendego-backend:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/boda-backend:latest
+            ${{ secrets.DOCKER_USERNAME }}/boda-backend:${{ github.sha }}
 
       - name: Build and push Frontend
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: Dockerfile.frontend
+          context: ./frontend
+          file: ./frontend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:latest
-            ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/boda-frontend:latest
+            ${{ secrets.DOCKER_USERNAME }}/boda-frontend:${{ github.sha }}
 
       - name: Deployment Summary
         run: |
-          echo "========================================="
-          echo "✅ CD PIPELINE COMPLETED SUCCESSFULLY!"
-          echo "========================================="
-          echo "📦 Images pushed to Docker Hub:"
-          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-backend:latest"
-          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-backend:${{ github.sha }}"
-          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:latest"
-          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:${{ github.sha }}"
-          echo "========================================="
+          echo "✅ Deployment Completed Successfully!"
+          echo "📦 Images pushed:"
+          echo " - ${{ secrets.DOCKER_USERNAME }}/boda-frontend:latest"
+          echo " - ${{ secrets.DOCKER_USERNAME }}/boda-backend:latest"
