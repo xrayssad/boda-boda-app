@@ -1,0 +1,30 @@
+[
+  {
+    "ride_id": "dfce6292",
+    "pickup": "Kampala Mall",
+    "dropoff": "Makerere",
+    "customer": "Demo User",
+    "status": "pending"
+  },
+  {
+    "ride_id": "368ea207",
+    "pickup": "a",
+    "dropoff": "b",
+    "customer": "Demo User",
+    "status": "pending"
+  },
+  {
+    "ride_id": "6094882f",
+    "pickup": "a",
+    "dropoff": "b",
+    "customer": "Demo User",
+    "status": "pending"
+  },
+  {
+    "ride_id": "1c12986c",
+    "pickup": "a",
+    "dropoff": "b",
+    "customer": "Demo User",
+    "status": "pending"
+  }
+]

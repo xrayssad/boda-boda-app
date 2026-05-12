@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+    environment:
+      - NODE_ENV=development
+    stdin_open: true
+    tty: true
+
+  django-backend:
+    build: ./django-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./django-backend:/app
+    command: python manage.py runserver 0.0.0.0:8000

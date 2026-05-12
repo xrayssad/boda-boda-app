@@ -1,0 +1,51 @@
+[
+  {
+    "ride_id": "b66ae66a",
+    "pickup": "a",
+    "dropoff": "b",
+    "customer": "Demo User",
+    "status": "pending"
+  },
+  {
+    "ride_id": "c7671b5d",
+    "pickup": "a",
+    "dropoff": "b",
+    "customer": "Demo User",
+    "status": "pending"
+  },
+  {
+    "ride_id": "0ca91adc",
+    "pickup": "Kisaasi",
+    "dropoff": "Udom",
+    "customer": "Demo User",
+    "status": "pending"
+  },
+  {
+    "ride_id": "4c416116",
+    "pickup": "Makerere University",
+    "dropoff": "Login",
+    "customer": "Demo User",
+    "status": "pending"
+  },
+  {
+    "ride_id": "45456e00",
+    "pickup": "Kisonge",
+    "dropoff": "Kijangwani Bus Terminal",
+    "customer": "John Doe",
+    "status": "pending"
+  },
+  {
+    "ride_id": "45481060",
+    "pickup": "Mikunguni",
+    "dropoff": "Kwa pweza shop",
+    "customer": "John Doe",
+    "status": "pending"
+  },
+  {
+    "ride_id": "762255f9",
+    "pickup": "CIVE mountain",
+    "dropoff": "SOCIAL BLOCK 3",
+    "customer": "John Doe",
+    "status": "pending"
+  }
+]

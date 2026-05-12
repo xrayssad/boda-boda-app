@@ -1,0 +1,20 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY frontend/package*.json ./
+COPY frontend/metrics-server.js ./
+
+# Install dependencies
+RUN npm install
+
+# Copy frontend code
+COPY frontend/ .
+
+# Expose ports
+EXPOSE 5173
+EXPOSE 5174
+
+# Start both main app and metrics server
+CMD ["sh", "-c", "npm run metrics & npm run dev"]
