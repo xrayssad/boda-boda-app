@@ -8,9 +8,10 @@ on:
     branches: [main]
 
 jobs:
-  build-and-push:
+  docker-build-push:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,7 +26,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.backend
@@ -35,7 +36,7 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/twendego-backend:${{ github.sha }}
 
       - name: Build and push Frontend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.frontend
@@ -44,5 +45,14 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:latest
             ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:${{ github.sha }}
 
-      - name: Image digest
-        run: echo "✅ CD Pipeline Completed. Images pushed to Docker Hub."
+      - name: Deployment Summary
+        run: |
+          echo "========================================="
+          echo "✅ CD PIPELINE COMPLETED SUCCESSFULLY!"
+          echo "========================================="
+          echo "📦 Images pushed to Docker Hub:"
+          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-backend:latest"
+          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-backend:${{ github.sha }}"
+          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:latest"
+          echo "  - ${{ secrets.DOCKER_USERNAME }}/twendego-frontend:${{ github.sha }}"
+          echo "========================================="
