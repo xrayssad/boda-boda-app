@@ -14,3 +14,4 @@ Access:
 # CD: Updated Docker token
 # CD: Docker token configured
 # Trigger CD pipeline
+# CD Pipeline: Testing Docker Hub authentication
