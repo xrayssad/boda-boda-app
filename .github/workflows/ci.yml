@@ -6,6 +6,9 @@ on:
 
 jobs:
 
+# ========================
+# 1. TEST STAGE
+# ========================
   test:
     runs-on: ubuntu-latest
 
@@ -20,12 +23,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run unit tests
         run: |
           pytest tests/
 
+# ========================
+# 2. BUILD DOCKER IMAGES
+# ========================
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -42,6 +49,9 @@ jobs:
         run: |
           docker build -f Dockerfile.frontend -t xrays351/boda-frontend:latest .
 
+# ========================
+# 3. PUSH TO DOCKERHUB
+# ========================
   push-to-dockerhub:
     needs: build
     runs-on: ubuntu-latest
@@ -56,16 +66,22 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Push Backend
+      - name: Tag Images
         run: |
           docker build -f Dockerfile.backend -t xrays351/boda-backend:latest .
+          docker build -f Dockerfile.frontend -t xrays351/boda-frontend:latest .
+
+      - name: Push Backend
+        run: |
           docker push xrays351/boda-backend:latest
 
       - name: Push Frontend
         run: |
-          docker build -f Dockerfile.frontend -t xrays351/boda-frontend:latest .
           docker push xrays351/boda-frontend:latest
 
+# ========================
+# 4. STAGING DEPLOYMENT
+# ========================
   staging:
     needs: push-to-dockerhub
     runs-on: ubuntu-latest
@@ -73,9 +89,16 @@ jobs:
     steps:
       - name: Simulate Staging Deployment
         run: |
-          echo "Deploying to staging..."
-          echo "Staging deployment successful"
+          echo "=================================="
+          echo "Deploying to STAGING environment"
+          echo "Pulling latest Docker images..."
+          echo "Starting containers..."
+          echo "Staging deployment SUCCESSFUL"
+          echo "=================================="
 
+# ========================
+# 5. PRODUCTION (APPROVAL GATE)
+# ========================
   production:
     needs: staging
     runs-on: ubuntu-latest
@@ -85,5 +108,9 @@ jobs:
     steps:
       - name: Production Deployment
         run: |
-          echo "Deploying to production..."
-          echo "Production deployed successfully"
+          echo "=================================="
+          echo "PRODUCTION DEPLOYMENT STARTED"
+          echo "Waiting for approval gate..."
+          echo "Deploying application..."
+          echo "PRODUCTION DEPLOYMENT SUCCESSFUL"
+          echo "=================================="
