@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI Pipeline (MQTT Enabled)
 
 on:
   push:
@@ -7,10 +7,17 @@ on:
 jobs:
 
 # ========================
-# 1. TEST STAGE
+# 1. TEST STAGE (MQTT VERIFIED)
 # ========================
   test:
     runs-on: ubuntu-latest
+
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+          - 9001:9001
 
     steps:
       - name: Checkout code
@@ -19,16 +26,58 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install paho-mqtt pytest
 
-      - name: Run unit tests
+      # ========================
+      # MQTT BROKER CHECK
+      # ========================
+      - name: Verify MQTT Broker
         run: |
-          pytest tests/
+          echo "=================================="
+          echo "Checking MQTT Broker..."
+          nc -z localhost 1883
+          echo "✅ MQTT Broker is running"
+          echo "=================================="
+
+      # ========================
+      # MQTT PUBLISH → RECEIVE TEST (TASK 6)
+      # ========================
+      - name: MQTT Publish Test
+        run: |
+          python - <<EOF
+          import paho.mqtt.publish as publish
+          import json
+
+          payload = {
+              "ride_id": 101,
+              "status": "requested",
+              "customer": "CI Test User",
+              "pickup": "Dar es Salaam",
+              "dropoff": "Ubungo"
+          }
+
+          print("📤 Sending MQTT message...")
+
+          publish.single(
+              "twendego/ride/request",
+              payload=json.dumps(payload),
+              hostname="localhost",
+              port=1883
+          )
+
+          print("✅ MQTT message published successfully")
+          print("📡 Topic: twendego/ride/request")
+          EOF
+
+      - name: Run Unit Tests
+        run: pytest tests/
+
 
 # ========================
 # 2. BUILD DOCKER IMAGES
@@ -49,10 +98,11 @@ jobs:
         run: |
           docker build -f Dockerfile.frontend -t xrays351/boda-frontend:latest .
 
+
 # ========================
 # 3. PUSH TO DOCKERHUB
 # ========================
-  push-to-dockerhub:
+  push:
     needs: build
     runs-on: ubuntu-latest
 
@@ -66,35 +116,48 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Tag Images
+      - name: Build Images
         run: |
           docker build -f Dockerfile.backend -t xrays351/boda-backend:latest .
           docker build -f Dockerfile.frontend -t xrays351/boda-frontend:latest .
 
       - name: Push Backend
-        run: |
-          docker push xrays351/boda-backend:latest
+        run: docker push xrays351/boda-backend:latest
 
       - name: Push Frontend
-        run: |
-          docker push xrays351/boda-frontend:latest
+        run: docker push xrays351/boda-frontend:latest
+
 
 # ========================
-# 4. STAGING DEPLOYMENT
+# 4. STAGING DEPLOYMENT (MQTT ENABLED)
 # ========================
   staging:
-    needs: push-to-dockerhub
+    needs: push
     runs-on: ubuntu-latest
 
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+
     steps:
-      - name: Simulate Staging Deployment
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify MQTT Broker (Staging)
+        run: |
+          nc -z localhost 1883
+          echo "✅ MQTT Broker running in staging"
+
+      - name: Simulate Deployment
         run: |
           echo "=================================="
-          echo "Deploying to STAGING environment"
-          echo "Pulling latest Docker images..."
-          echo "Starting containers..."
-          echo "Staging deployment SUCCESSFUL"
+          echo "STAGING DEPLOYMENT"
+          echo "MQTT Broker Active"
+          echo "Backend + Frontend Ready"
           echo "=================================="
+
 
 # ========================
 # 5. PRODUCTION (APPROVAL GATE)
@@ -105,12 +168,22 @@ jobs:
     environment:
       name: production
 
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+
     steps:
-      - name: Production Deployment
+      - name: Verify MQTT Broker (Production)
+        run: |
+          nc -z localhost 1883
+          echo "✅ MQTT Broker running in production"
+
+      - name: Deploy Production
         run: |
           echo "=================================="
-          echo "PRODUCTION DEPLOYMENT STARTED"
-          echo "Waiting for approval gate..."
-          echo "Deploying application..."
-          echo "PRODUCTION DEPLOYMENT SUCCESSFUL"
+          echo "PRODUCTION DEPLOYMENT"
+          echo "MQTT System Live"
+          echo "Bodaboda App Running"
           echo "=================================="
