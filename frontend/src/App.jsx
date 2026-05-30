@@ -11,7 +11,6 @@ function AppContent() {
   const [showSignupModal, setShowSignupModal] = useState(false);
 
   useEffect(() => {
-    // Check the current path and show appropriate modal
     if (location.pathname === '/login') {
       setShowLoginModal(true);
       setShowSignupModal(false);
@@ -26,24 +25,24 @@ function AppContent() {
 
   const handleCloseLogin = () => {
     setShowLoginModal(false);
-    navigate('/'); // Only navigate to home when closing
+    navigate('/');
   };
 
   const handleCloseSignup = () => {
     setShowSignupModal(false);
-    navigate('/'); // Only navigate to home when closing
+    navigate('/');
   };
 
   const handleSwitchToSignup = () => {
     setShowLoginModal(false);
     setShowSignupModal(true);
-    navigate('/signup'); // Change URL to /signup
+    navigate('/signup');
   };
 
   const handleSwitchToLogin = () => {
     setShowSignupModal(false);
     setShowLoginModal(true);
-    navigate('/login'); // Change URL to /login
+    navigate('/login');
   };
 
   return (

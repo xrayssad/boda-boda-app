@@ -73,7 +73,5 @@ function AppWithLoading() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <AppWithLoading />
-  </React.StrictMode>,
+  <AppWithLoading />
 )

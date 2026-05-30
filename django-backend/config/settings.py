@@ -131,10 +131,12 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Prometheus metrics
-INSTALLED_APPS.append('django_prometheus')
+#INSTALLED_APPS.append('django_prometheus')
 
 MIDDLEWARE = [
-    'django_prometheus.middleware.PrometheusBeforeMiddleware',
+##    'django_prometheus.middleware.PrometheusBeforeMiddleware',
 ] + MIDDLEWARE + [
-    'django_prometheus.middleware.PrometheusAfterMiddleware',
+##    'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
+
+# MQTT Service - Auto start

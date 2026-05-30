@@ -1,21 +1,41 @@
 version: '3.8'
 
 services:
-  frontend:
-    build: ./frontend
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
     ports:
-      - "5173:5173"
+      - "1883:1883"
+      - "9001:9001"
     volumes:
-      - ./frontend:/app
-    environment:
-      - NODE_ENV=development
-    stdin_open: true
-    tty: true
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
 
-  django-backend:
-    build: ./django-backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: twendego-backend
     ports:
       - "8000:8000"
+    depends_on:
+      - mosquitto
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
     volumes:
       - ./django-backend:/app
-    command: python manage.py runserver 0.0.0.0:8000
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: twendego-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped

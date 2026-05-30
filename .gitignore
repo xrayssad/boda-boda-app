@@ -6,3 +6,16 @@ db.sqlite3
 .DS_Store
 node_modules/
 *.log
+
+# MQTT Mosquitto data
+mosquitto/data/
+mosquitto/log/
+*.db
+
+# Backups
+*.bak
+
+# Python venv
+venv/
+__pycache__/
+*.pyc

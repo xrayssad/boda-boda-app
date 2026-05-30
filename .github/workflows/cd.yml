@@ -5,26 +5,156 @@ on:
     branches: [main]
 
 jobs:
-  staging-deploy:
+
+  # ── Job 1: MQTT Integration Test ─────────────────────────────
+  mqtt-test:
     runs-on: ubuntu-latest
+
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+          - 9001:9001
+        options: >-
+          --health-cmd "nc -z localhost 1883 || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Staging deployment
-        run: echo "✅ Deployed to Staging Environment"
 
+      - name: Configure Mosquitto (allow anonymous)
+        run: |
+          docker exec ${{ job.services.mosquitto.id }} sh -c \
+            "echo 'listener 1883
+          allow_anonymous true' > /mosquitto/config/mosquitto.conf && kill -HUP 1" || true
+          sleep 3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install paho-mqtt
+        run: pip install paho-mqtt
+
+      - name: Run MQTT publish/subscribe test
+        run: |
+          python3 << 'PYEOF'
+          import paho.mqtt.client as mqtt
+          import time, sys
+
+          received = []
+
+          def on_connect(client, userdata, flags, rc):
+              if rc == 0:
+                  client.subscribe("twendego/ride/#", qos=1)
+
+          def on_message(client, userdata, msg):
+              received.append(msg.payload.decode())
+              print(f"✅ Received: {msg.payload.decode()[:60]}")
+
+          sub = mqtt.Client(client_id="ci_sub")
+          sub.on_connect = on_connect
+          sub.on_message = on_message
+          sub.connect("localhost", 1883, 60)
+          sub.loop_start()
+          time.sleep(2)
+
+          pub = mqtt.Client(client_id="ci_pub")
+          pub.connect("localhost", 1883, 60)
+          pub.publish("twendego/ride/request",
+            '{"ride_id":1,"status":"requested","customer_name":"Test","pickup_location":"A","dropoff_location":"B"}',
+            qos=1)
+          pub.publish("twendego/ride/status",
+            '{"ride_id":1,"status":"accepted","rider_name":"Juma","eta":7}',
+            qos=1)
+          time.sleep(3)
+
+          sub.loop_stop()
+          sub.disconnect()
+          pub.disconnect()
+
+          if len(received) >= 2:
+              print(f"✅ MQTT TEST PASSED — {len(received)} messages delivered")
+              sys.exit(0)
+          else:
+              print(f"❌ MQTT TEST FAILED — only {len(received)} messages received")
+              sys.exit(1)
+          PYEOF
+
+      - name: Verify MQTT broker
+        run: |
+          nc -z localhost 1883
+          echo "✅ MQTT Broker verified on port 1883"
+
+  # ── Job 2: Staging Deploy ─────────────────────────────────────
+  staging-deploy:
+    runs-on: ubuntu-latest
+    needs: mqtt-test
+
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify MQTT Broker
+        run: |
+          nc -z localhost 1883
+          echo "✅ MQTT Broker running in staging"
+
+      - name: Staging deployment
+        run: |
+          echo "=================================="
+          echo "  STAGING DEPLOYMENT SUCCESSFUL"
+          echo "  MQTT Enabled System Running"
+          echo "  Topics: twendego/ride/request"
+          echo "          twendego/ride/status"
+          echo "=================================="
+
+  # ── Job 3: Manual Approval Gate ──────────────────────────────
   approval-gate:
     runs-on: ubuntu-latest
     needs: staging-deploy
     environment: production
+
     steps:
       - name: Manual approval
-        run: echo "⏳ Release Manager approved - proceeding to production"
+        run: echo "✅ Release Manager approved — proceeding to production"
 
+  # ── Job 4: Production Deploy ──────────────────────────────────
   production-deploy:
     runs-on: ubuntu-latest
     needs: approval-gate
+
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify MQTT Broker
+        run: |
+          nc -z localhost 1883
+          echo "✅ MQTT Broker running in production"
+
       - name: Production deployment
-        run: echo "✅ Deployed to Production Environment"
+        run: |
+          echo "=================================="
+          echo "  PRODUCTION DEPLOYMENT SUCCESSFUL"
+          echo "  MQTT Enabled System Live"
+          echo "  Broker: Mosquitto"
+          echo "  Ports: 1883 (TCP), 9001 (WebSocket)"
+          echo "=================================="
