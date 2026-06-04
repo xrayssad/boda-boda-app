@@ -33,7 +33,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install paho-mqtt requests
+          pip install paho-mqtt requests pytest pytest
       
       - name: MQTT Connection Test
         run: |
