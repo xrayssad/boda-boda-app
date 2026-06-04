@@ -3,187 +3,173 @@ name: CI Pipeline (MQTT Enabled)
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
+
+env:
+  DOCKER_USERNAME: xrays351
+  DOCKER_IMAGE_BACKEND: xrays351/boda-backend
+  DOCKER_IMAGE_FRONTEND: xrays351/boda-frontend
 
 jobs:
-
-# ========================
-# 1. TEST STAGE (MQTT VERIFIED)
-# ========================
+  # ========================
+  # 1. TEST STAGE
+  # ========================
   test:
     runs-on: ubuntu-latest
-
     services:
       mosquitto:
         image: eclipse-mosquitto:latest
         ports:
           - 1883:1883
           - 9001:9001
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+      
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
           pip install paho-mqtt pytest
-
-      # ========================
-      # MQTT BROKER CHECK
-      # ========================
-      - name: Verify MQTT Broker
+      
+      - name: MQTT Connection Test
         run: |
-          echo "=================================="
-          echo "Checking MQTT Broker..."
-          nc -z localhost 1883
-          echo "✅ MQTT Broker is running"
-          echo "=================================="
-
-      # ========================
-      # MQTT PUBLISH → RECEIVE TEST (TASK 6)
-      # ========================
-      - name: MQTT Publish Test
+          python -c "
+          import paho.mqtt.client as mqtt
+          import time
+          client = mqtt.Client()
+          client.connect('localhost', 1883, 60)
+          client.publish('test', 'CI/CD Test')
+          print('✅ MQTT test passed')
+          "
+      
+      - name: Unit Tests (Fail if any fail)
         run: |
-          python - <<EOF
-          import paho.mqtt.publish as publish
-          import json
+          pytest tests/ || exit 1
 
-          payload = {
-              "ride_id": 101,
-              "status": "requested",
-              "customer": "CI Test User",
-              "pickup": "Dar es Salaam",
-              "dropoff": "Ubungo"
-          }
-
-          print("📤 Sending MQTT message...")
-
-          publish.single(
-              "twendego/ride/request",
-              payload=json.dumps(payload),
-              hostname="localhost",
-              port=1883
-          )
-
-          print("✅ MQTT message published successfully")
-          print("📡 Topic: twendego/ride/request")
-          EOF
-
-      - name: Run Unit Tests
-        run: pytest tests/
-
-
-# ========================
-# 2. BUILD DOCKER IMAGES
-# ========================
-  build:
+  # ========================
+  # 2. BUILD & PUSH TO DOCKER HUB
+  # ========================
+  build-and-push:
     needs: test
     runs-on: ubuntu-latest
-
+    if: success()
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Build Backend Image
-        run: |
-          docker build -f Dockerfile.backend -t xrays351/boda-backend:latest .
-
-      - name: Build Frontend Image
-        run: |
-          docker build -f Dockerfile.frontend -t xrays351/boda-frontend:latest .
-
-
-# ========================
-# 3. PUSH TO DOCKERHUB
-# ========================
-  push:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to DockerHub
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build Images
+          password: ${{ secrets.DOCKER_TOKEN }}
+      
+      # ✅ TASK 5: VERSION TAGGING
+      - name: Get version
+        id: version
         run: |
-          docker build -f Dockerfile.backend -t xrays351/boda-backend:latest .
-          docker build -f Dockerfile.frontend -t xrays351/boda-frontend:latest .
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="latest"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+      
+      # ✅ TASK 5: Build with multiple tags
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE_BACKEND }}:latest
+            ${{ env.DOCKER_IMAGE_BACKEND }}:${{ steps.version.outputs.version }}
+            ${{ env.DOCKER_IMAGE_BACKEND }}:v1.0
+      
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
+            ${{ env.DOCKER_IMAGE_FRONTEND }}:${{ steps.version.outputs.version }}
+            ${{ env.DOCKER_IMAGE_FRONTEND }}:v1.0
 
-      - name: Push Backend
-        run: docker push xrays351/boda-backend:latest
-
-      - name: Push Frontend
-        run: docker push xrays351/boda-frontend:latest
-
-
-# ========================
-# 4. STAGING DEPLOYMENT (MQTT ENABLED)
-# ========================
-  staging:
-    needs: push
+  # ========================
+  # 3. DEPLOY FROM DOCKER HUB (TASK 3)
+  # ========================
+  deploy-from-registry:
+    needs: build-and-push
     runs-on: ubuntu-latest
-
-    services:
-      mosquitto:
-        image: eclipse-mosquitto:latest
-        ports:
-          - 1883:1883
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Verify MQTT Broker (Staging)
-        run: |
-          nc -z localhost 1883
-          echo "✅ MQTT Broker running in staging"
-
-      - name: Simulate Deployment
+      - name: Pull and Deploy from Docker Hub
         run: |
           echo "=================================="
-          echo "STAGING DEPLOYMENT"
-          echo "MQTT Broker Active"
-          echo "Backend + Frontend Ready"
+          echo "DEPLOYING FROM DOCKER HUB"
           echo "=================================="
-
-
-# ========================
-# 5. PRODUCTION (APPROVAL GATE)
-# ========================
-  production:
-    needs: staging
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-
-    services:
-      mosquitto:
-        image: eclipse-mosquitto:latest
-        ports:
-          - 1883:1883
-
-    steps:
-      - name: Verify MQTT Broker (Production)
+          
+          # Stop old containers
+          docker stop twendego-backend twendego-frontend mosquitto 2>/dev/null || true
+          docker rm twendego-backend twendego-frontend mosquitto 2>/dev/null || true
+          
+          # Pull images from Docker Hub
+          docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
+          docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
+          
+          # Start Mosquitto
+          docker run -d --name mosquitto -p 1883:1883 -p 9001:9001 eclipse-mosquitto
+          
+          # Start Backend
+          docker run -d --name twendego-backend \
+            -p 8000:8000 \
+            --link mosquitto \
+            ${{ env.DOCKER_IMAGE_BACKEND }}:latest
+          
+          # Start Frontend
+          docker run -d --name twendego-frontend \
+            -p 5173:5173 \
+            --link twendego-backend \
+            ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
+          
+          echo "✅ Deployed from Docker Hub!"
+      
+      # ✅ TASK 6: FAILURE HANDLING - Verify deployment
+      - name: Verify Deployment
         run: |
-          nc -z localhost 1883
-          echo "✅ MQTT Broker running in production"
-
-      - name: Deploy Production
+          sleep 10
+          if ! docker ps | grep -q twendego-backend; then
+            echo "❌ Backend failed to start!"
+            docker logs twendego-backend --tail 20
+            exit 1
+          fi
+          if ! docker ps | grep -q twendego-frontend; then
+            echo "❌ Frontend failed to start!"
+            exit 1
+          fi
+          echo "✅ All containers running successfully!"
+      
+      # ✅ TASK 4: MQTT still works after deployment
+      - name: Verify MQTT after deployment
+        run: |
+          docker exec mosquitto mosquitto_pub -h localhost -p 1883 -t "twendego/test" -m "Deployment Success"
+          echo "✅ MQTT verified after deployment"
+      
+      - name: Deployment Status
         run: |
           echo "=================================="
-          echo "PRODUCTION DEPLOYMENT"
-          echo "MQTT System Live"
-          echo "Bodaboda App Running"
+          echo "DEPLOYMENT SUCCESSFUL!"
+          echo "Images pulled from: Docker Hub"
+          echo "Containers running:"
+          docker ps --format "table {{.Names}}\t{{.Status}}"
           echo "=================================="

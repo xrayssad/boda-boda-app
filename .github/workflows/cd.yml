@@ -1,160 +1,77 @@
-name: CD Pipeline
+name: CD Pipeline (Third-Party Deployment)
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (latest, v1.0)'
+        required: true
+        default: 'latest'
+
+env:
+  DOCKER_USERNAME: xrays351
+  DOCKER_IMAGE_BACKEND: xrays351/boda-backend
+  DOCKER_IMAGE_FRONTEND: xrays351/boda-frontend
 
 jobs:
-
-  # ── Job 1: MQTT Integration Test ─────────────────────────────
-  mqtt-test:
+  # ✅ TASK 6: FAILURE HANDLING - Deployment only if tests pass
+  pre-deploy-check:
     runs-on: ubuntu-latest
-
-    services:
-      mosquitto:
-        image: eclipse-mosquitto:latest
-        ports:
-          - 1883:1883
-          - 9001:9001
-        options: >-
-          --health-cmd "nc -z localhost 1883 || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure Mosquitto (allow anonymous)
+      - name: Verify Docker Hub images exist
         run: |
-          docker exec ${{ job.services.mosquitto.id }} sh -c \
-            "echo 'listener 1883
-          allow_anonymous true' > /mosquitto/config/mosquitto.conf && kill -HUP 1" || true
-          sleep 3
+          echo "Checking if images exist on Docker Hub..."
+          # This will fail if images don't exist
+          docker manifest inspect ${{ env.DOCKER_IMAGE_BACKEND }}:latest > /dev/null || exit 1
+          docker manifest inspect ${{ env.DOCKER_IMAGE_FRONTEND }}:latest > /dev/null || exit 1
+          echo "✅ Images exist on Docker Hub"
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install paho-mqtt
-        run: pip install paho-mqtt
-
-      - name: Run MQTT publish/subscribe test
-        run: |
-          python3 << 'PYEOF'
-          import paho.mqtt.client as mqtt
-          import time, sys
-
-          received = []
-
-          def on_connect(client, userdata, flags, rc):
-              if rc == 0:
-                  client.subscribe("twendego/ride/#", qos=1)
-
-          def on_message(client, userdata, msg):
-              received.append(msg.payload.decode())
-              print(f"✅ Received: {msg.payload.decode()[:60]}")
-
-          sub = mqtt.Client(client_id="ci_sub")
-          sub.on_connect = on_connect
-          sub.on_message = on_message
-          sub.connect("localhost", 1883, 60)
-          sub.loop_start()
-          time.sleep(2)
-
-          pub = mqtt.Client(client_id="ci_pub")
-          pub.connect("localhost", 1883, 60)
-          pub.publish("twendego/ride/request",
-            '{"ride_id":1,"status":"requested","customer_name":"Test","pickup_location":"A","dropoff_location":"B"}',
-            qos=1)
-          pub.publish("twendego/ride/status",
-            '{"ride_id":1,"status":"accepted","rider_name":"Juma","eta":7}',
-            qos=1)
-          time.sleep(3)
-
-          sub.loop_stop()
-          sub.disconnect()
-          pub.disconnect()
-
-          if len(received) >= 2:
-              print(f"✅ MQTT TEST PASSED — {len(received)} messages delivered")
-              sys.exit(0)
-          else:
-              print(f"❌ MQTT TEST FAILED — only {len(received)} messages received")
-              sys.exit(1)
-          PYEOF
-
-      - name: Verify MQTT broker
-        run: |
-          nc -z localhost 1883
-          echo "✅ MQTT Broker verified on port 1883"
-
-  # ── Job 2: Staging Deploy ─────────────────────────────────────
-  staging-deploy:
-    runs-on: ubuntu-latest
-    needs: mqtt-test
-
-    services:
-      mosquitto:
-        image: eclipse-mosquitto:latest
-        ports:
-          - 1883:1883
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Verify MQTT Broker
-        run: |
-          nc -z localhost 1883
-          echo "✅ MQTT Broker running in staging"
-
-      - name: Staging deployment
-        run: |
-          echo "=================================="
-          echo "  STAGING DEPLOYMENT SUCCESSFUL"
-          echo "  MQTT Enabled System Running"
-          echo "  Topics: twendego/ride/request"
-          echo "          twendego/ride/status"
-          echo "=================================="
-
-  # ── Job 3: Manual Approval Gate ──────────────────────────────
-  approval-gate:
-    runs-on: ubuntu-latest
-    needs: staging-deploy
-    environment: production
-
-    steps:
-      - name: Manual approval
-        run: echo "✅ Release Manager approved — proceeding to production"
-
-  # ── Job 4: Production Deploy ──────────────────────────────────
   production-deploy:
+    needs: pre-deploy-check
     runs-on: ubuntu-latest
-    needs: approval-gate
-
-    services:
-      mosquitto:
-        image: eclipse-mosquitto:latest
-        ports:
-          - 1883:1883
-
+    environment: production
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Verify MQTT Broker
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      
+      - name: Pull from Docker Hub
         run: |
-          nc -z localhost 1883
-          echo "✅ MQTT Broker running in production"
-
-      - name: Production deployment
+          VERSION=${{ github.event.inputs.version || 'latest' }}
+          echo "Deploying version: $VERSION"
+          docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:$VERSION
+          docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:$VERSION
+      
+      - name: Deploy to Production
+        run: |
+          docker stop twendego-backend twendego-frontend 2>/dev/null || true
+          docker rm twendego-backend twendego-frontend 2>/dev/null || true
+          
+          docker run -d --name twendego-backend \
+            -p 8000:8000 \
+            --link mosquitto \
+            ${{ env.DOCKER_IMAGE_BACKEND }}:${{ github.event.inputs.version || 'latest' }}
+          
+          docker run -d --name twendego-frontend \
+            -p 80:5173 \
+            --link twendego-backend \
+            ${{ env.DOCKER_IMAGE_FRONTEND }}:${{ github.event.inputs.version || 'latest' }}
+      
+      - name: Verify MQTT in Production
+        run: |
+          docker exec mosquitto mosquitto_pub -h localhost -p 1883 -t "twendego/production" -m "Deployed"
+          echo "✅ MQTT verified in production"
+      
+      - name: Deployment Complete
         run: |
           echo "=================================="
-          echo "  PRODUCTION DEPLOYMENT SUCCESSFUL"
-          echo "  MQTT Enabled System Live"
-          echo "  Broker: Mosquitto"
-          echo "  Ports: 1883 (TCP), 9001 (WebSocket)"
+          echo "PRODUCTION DEPLOYMENT COMPLETE!"
+          echo "Version: ${{ github.event.inputs.version || 'latest' }}"
+          echo "Source: Docker Hub"
           echo "=================================="

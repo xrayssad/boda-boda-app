@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    restart: unless-stopped
+
+  backend:
+    image: xrays351/boda-backend:latest
+    container_name: twendego-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mosquitto
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - DEBUG=False
+    restart: unless-stopped
+
+  frontend:
+    image: xrays351/boda-frontend:latest
+    container_name: twendego-frontend
+    ports:
+      - "80:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
