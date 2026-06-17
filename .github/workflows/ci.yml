@@ -109,7 +109,7 @@ jobs:
   deploy-from-registry:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: success()   # ✅ Improvement 1: Auto-deploy on success
+    if: success()
     
     steps:
       - name: Pull and Deploy from Docker Hub
@@ -118,24 +118,19 @@ jobs:
           echo "DEPLOYING FROM DOCKER HUB"
           echo "=================================="
           
-          # Stop old containers
           docker stop twendego-backend twendego-frontend mosquitto 2>/dev/null || true
           docker rm twendego-backend twendego-frontend mosquitto 2>/dev/null || true
           
-          # Pull images from Docker Hub
           docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
           docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
           
-          # Start Mosquitto
           docker run -d --name mosquitto -p 1883:1883 -p 9001:9001 eclipse-mosquitto
           
-          # Start Backend
           docker run -d --name twendego-backend \
             -p 8000:8000 \
             --link mosquitto \
             ${{ env.DOCKER_IMAGE_BACKEND }}:latest
           
-          # Start Frontend
           docker run -d --name twendego-frontend \
             -p 5173:5173 \
             --link twendego-backend \
@@ -184,30 +179,24 @@ jobs:
         run: |
           echo "⚠️ Deployment failed! Rolling back..."
           
-          # Pull previous stable version
           docker pull xrays351/boda-backend:v1.0
           docker pull xrays351/boda-frontend:v1.0
           
-          # Tag as latest
           docker tag xrays351/boda-backend:v1.0 xrays351/boda-backend:latest
           docker tag xrays351/boda-frontend:v1.0 xrays351/boda-frontend:latest
           docker push xrays351/boda-backend:latest
           docker push xrays351/boda-frontend:latest
           
-          # Restart containers with rolled-back image
           docker stop twendego-backend twendego-frontend mosquitto 2>/dev/null || true
           docker rm twendego-backend twendego-frontend mosquitto 2>/dev/null || true
           
-          # Start Mosquitto
           docker run -d --name mosquitto -p 1883:1883 -p 9001:9001 eclipse-mosquitto
           
-          # Start Backend with rolled-back image
           docker run -d --name twendego-backend \
             -p 8000:8000 \
             --link mosquitto \
             xrays351/boda-backend:latest
           
-          # Start Frontend with rolled-back image
           docker run -d --name twendego-frontend \
             -p 5173:5173 \
             --link twendego-backend \
@@ -221,12 +210,26 @@ jobs:
           docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
           echo "✅ Rollback verification complete"
 
-  - name: Send Slack Notification
-  uses: slackapi/slack-github-action@v1.25.0
-  with:
-    payload: |
-      {
-        "text": "🚀 *TwendeGo Pipeline Status*\n*Status:* ${{ job.status }}\n*Branch:* ${{ github.ref_name }}"
-      }
-  env:
-    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  # ========================
+  # 5. ✅ SLACK NOTIFICATIONS (IMPROVEMENT 3)
+  # ========================
+  slack-notification:
+    runs-on: ubuntu-latest
+    needs: [test, build-and-push, deploy-from-registry]
+    if: always()
+    
+    steps:
+      - name: Send Slack Notification
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "🚀 *TwendeGo Pipeline Status*\n\n" +
+                      "📊 *Status:* ${{ job.status }}\n" +
+                      "📦 *Repository:* ${{ github.repository }}\n" +
+                      "🔀 *Branch:* ${{ github.ref_name }}\n" +
+                      "🕐 *Duration:* ${{ github.run_duration }}\n" +
+                      "🔗 *Link:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
