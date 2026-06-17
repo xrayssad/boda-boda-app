@@ -210,7 +210,7 @@ jobs:
           docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
           echo "✅ Rollback verification complete"
 
-  # ========================
+   # ========================
   # 5. ✅ SLACK NOTIFICATIONS (IMPROVEMENT 3)
   # ========================
   slack-notification:
@@ -219,17 +219,17 @@ jobs:
     if: always()
     
     steps:
-      - name: Send Slack Notification
+      - name: Create Slack message
+        run: |
+          cat > slack.json << 'EOF'
+          {
+            "text": "🚀 TwendeGo Pipeline Status\nStatus: ${{ job.status }}\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nDuration: ${{ github.run_duration }}\nLink: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+      
+      - name: Send to Slack
         uses: slackapi/slack-github-action@v1.25.0
         with:
-          payload: |
-            {
-              "text": "🚀 *TwendeGo Pipeline Status*\n\n" +
-                      "📊 *Status:* ${{ job.status }}\n" +
-                      "📦 *Repository:* ${{ github.repository }}\n" +
-                      "🔀 *Branch:* ${{ github.ref_name }}\n" +
-                      "🕐 *Duration:* ${{ github.run_duration }}\n" +
-                      "🔗 *Link:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }
+          payload-file-path: slack.json
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
