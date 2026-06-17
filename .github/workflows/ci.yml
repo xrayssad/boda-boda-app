@@ -46,9 +46,9 @@ jobs:
           print('✅ MQTT test passed')
           "
       
-      - name: Unit Tests (Fail if any fail)
+      - name: Unit Tests
         run: |
-          pytest tests/ || exit 1
+          python -m pytest tests/ || exit 1
 
   # ========================
   # 2. BUILD & PUSH TO DOCKER HUB
@@ -104,11 +104,12 @@ jobs:
             ${{ env.DOCKER_IMAGE_FRONTEND }}:v1.0
 
   # ========================
-  # 3. DEPLOY FROM DOCKER HUB
+  # 3. DEPLOY FROM DOCKER HUB (AUTOMATED - NO MANUAL APPROVAL)
   # ========================
   deploy-from-registry:
     needs: build-and-push
     runs-on: ubuntu-latest
+    if: success()   # ✅ Improvement 1: Auto-deploy on success
     
     steps:
       - name: Pull and Deploy from Docker Hub
@@ -169,3 +170,63 @@ jobs:
           echo "Containers running:"
           docker ps --format "table {{.Names}}\t{{.Status}}"
           echo "=================================="
+
+  # ========================
+  # 4. ✅ ROLLBACK MECHANISM (IMPROVEMENT 2)
+  # ========================
+  rollback:
+    runs-on: ubuntu-latest
+    needs: deploy-from-registry
+    if: failure()
+    
+    steps:
+      - name: Rollback to previous version
+        run: |
+          echo "⚠️ Deployment failed! Rolling back..."
+          
+          # Pull previous stable version
+          docker pull xrays351/boda-backend:v1.0
+          docker pull xrays351/boda-frontend:v1.0
+          
+          # Tag as latest
+          docker tag xrays351/boda-backend:v1.0 xrays351/boda-backend:latest
+          docker tag xrays351/boda-frontend:v1.0 xrays351/boda-frontend:latest
+          docker push xrays351/boda-backend:latest
+          docker push xrays351/boda-frontend:latest
+          
+          # Restart containers with rolled-back image
+          docker stop twendego-backend twendego-frontend mosquitto 2>/dev/null || true
+          docker rm twendego-backend twendego-frontend mosquitto 2>/dev/null || true
+          
+          # Start Mosquitto
+          docker run -d --name mosquitto -p 1883:1883 -p 9001:9001 eclipse-mosquitto
+          
+          # Start Backend with rolled-back image
+          docker run -d --name twendego-backend \
+            -p 8000:8000 \
+            --link mosquitto \
+            xrays351/boda-backend:latest
+          
+          # Start Frontend with rolled-back image
+          docker run -d --name twendego-frontend \
+            -p 5173:5173 \
+            --link twendego-backend \
+            xrays351/boda-frontend:latest
+          
+          echo "✅ Rollback completed - v1.0 deployed"
+      
+      - name: Verify Rollback
+        run: |
+          sleep 5
+          docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+          echo "✅ Rollback verification complete"
+
+  - name: Send Slack Notification
+  uses: slackapi/slack-github-action@v1.25.0
+  with:
+    payload: |
+      {
+        "text": "🚀 *TwendeGo Pipeline Status*\n*Status:* ${{ job.status }}\n*Branch:* ${{ github.ref_name }}"
+      }
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
